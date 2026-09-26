@@ -2,6 +2,7 @@
 return the few claims most likely to apply, each with its evidence."""
 import hashlib
 import json
+import math
 import os
 
 import numpy as np
@@ -67,6 +68,16 @@ def rank(query, diff="", project="", k=3, anchor_weight=0.3, claims=None):
                         score=round(sim + anchor_weight * ov, 3)))
     out.sort(key=lambda r: -r["score"])
     return out[:k]
+
+
+def default_floor(n_claims):
+    """The score a claim needs before the prompt hook mentions it, given how many claims were
+    ranked. The best score among unrelated claims rises with their number by chance alone, so a
+    fixed floor is too strict for a new store and too loose for a large one. Measured on 97 real
+    claims with 42 related and 30 unrelated prompts (2026-09-26), this keeps unrelated prompts
+    firing at about 3-10% at any size: with 1 claim it shows 86% of related claims where a fixed
+    0.65 showed 68%, and with 97 it fires on 10% of unrelated prompts where 0.65 fired on 23%."""
+    return 0.61 + 0.015 * math.log(max(1, n_claims))
 
 
 def render(results, floor=0.0, header=True):

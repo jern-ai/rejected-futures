@@ -133,7 +133,10 @@ To work on rf itself, use a virtual environment and an editable install:
      "skip_projects": ["/Users/me/private"]}
 
 `threshold` is the classifier score a turn needs to become a candidate; `recall_floor` is the
-score a claim needs before the prompt hook mentions it.
+score a claim needs before the prompt hook mentions it. Left unset, the floor follows the size
+of the store, `0.61 + 0.015 × ln(claims)`: about 0.61 for one claim and 0.68 for a hundred,
+because the best score among unrelated claims rises with their number by chance alone. Set it
+to fix the floor instead.
 
 ## A claim, as stored
 

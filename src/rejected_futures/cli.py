@@ -141,8 +141,10 @@ def hook(event):
         prompt = data.get("prompt") or ""
         if len(prompt) < 12 or prompt.startswith("/"):
             return 0
-        res = R.rank(prompt, project=repo, k=cfg["top_k"], anchor_weight=cfg["anchor_weight"])
-        text = R.render(res, floor=cfg["recall_floor"])
+        claims = store.list_claims(project=repo, status="held")
+        res = R.rank(prompt, project=repo, k=cfg["top_k"], anchor_weight=cfg["anchor_weight"], claims=claims)
+        floor = cfg["recall_floor"] if cfg["recall_floor"] is not None else R.default_floor(len(claims))
+        text = R.render(res, floor=floor)
         if text:
             print(text)
         return 0
