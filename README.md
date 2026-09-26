@@ -5,7 +5,7 @@ transcripts and git history already on your disk, and handed to whatever agent y
 the moment it is about to repeat one. rf itself sends nothing anywhere. No API key. No
 repository to connect.
 
-Working name. Status: personal trial.
+Status: early release (0.1.0), Claude Code transcripts only. Built by the makers of [Jern](https://jern.ai).
 
 ## What it reads, keeps, and sends
 
