@@ -31,13 +31,28 @@ yours to edit.
 
 ## Install
 
-    python3 -m venv ~/.rejected-futures/venv
-    ~/.rejected-futures/venv/bin/pip install -e .
-    ln -s ~/.rejected-futures/venv/bin/rf /usr/local/bin/rf   # or add the venv bin to PATH
+rf is not on PyPI yet; install it from GitHub with one command. It needs Python 3.10 or newer.
+
+    pipx install git+https://github.com/jern-ai/rejected-futures
+
+or, with uv:
+
+    uv tool install git+https://github.com/jern-ai/rejected-futures
+
+Then run the first pass and wire up your agent:
 
     rf scan                 # first pass over every transcript (a few minutes)
     rf status
     rf setup claude-code    # prints the three integration steps; --write installs two of them
+
+### From a checkout
+
+To work on rf itself, use a virtual environment and an editable install:
+
+    python3 -m venv .venv
+    . .venv/bin/activate
+    pip install -e '.[test]'
+    python -m pytest
 
 ## Commands
 
