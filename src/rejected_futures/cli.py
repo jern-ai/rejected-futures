@@ -203,8 +203,23 @@ def setup_claude(write):
 
 # ---- main --------------------------------------------------------------------------------
 
+def package_version():
+    """The installed distribution's version, falling back to the source __version__."""
+    try:
+        from importlib.metadata import PackageNotFoundError, version
+        try:
+            return version("rejected-futures")
+        except PackageNotFoundError:
+            pass
+    except ImportError:
+        pass
+    from . import __version__
+    return __version__
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser(prog="rf", description=__doc__)
+    ap.add_argument("--version", action="version", version=f"rf {package_version()}")
     sub = ap.add_subparsers(dest="cmd", required=True)
     s = sub.add_parser("scan", help="read new transcript turns and flag candidates")
     s.add_argument("--all", action="store_true", help="re-read every session file")
