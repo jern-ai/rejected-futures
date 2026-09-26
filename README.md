@@ -68,6 +68,7 @@ To work on rf itself, use a virtual environment and an editable install:
 | `rf anchor [id]` | Derive code anchors from origin commits (every unanchored claim when no id). |
 | `rf retire id` | Mark a claim retired or `--status contradicted`. |
 | `rf serve` | The MCP server over stdio: `recall`, `record`, `candidates`, `resolve`, `claims`, `retire`. |
+| `rf --version` | Print the installed version. |
 | `rf hook prompt|edit` | Claude Code hook entry points (installed by `rf setup claude-code --write`). |
 
 ## Configuration
