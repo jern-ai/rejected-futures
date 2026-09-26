@@ -29,7 +29,7 @@ a project out entirely with `skip_projects` (see Configuration).
 
 | File | What is in it |
 |---|---|
-| `candidates.jsonl` | Only the turns the classifier flags (about one in three): your turn cut to 2,000 characters, the assistant's reply before it to 600 and after it to 1,500, redacted, with the session id, timestamp, project path and branch. |
+| `candidates.jsonl` | Only the turns the classifier flags (a fifth to a third): your turn cut to 2,000 characters, the assistant's reply before it to 600 and after it to 1,500, redacted, with the session id, timestamp, project path and branch. |
 | `claims/*.md` | The claims you or your agent recorded, each with a short evidence quote and its date. |
 | `state.json` | Which transcript files and turn ids have been read; no text. |
 | `index.json` | Embeddings of claim statements, for recall. |
