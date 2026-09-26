@@ -49,7 +49,7 @@ def save_state(state):
 
 
 def load_config():
-    cfg = {"threshold": None, "recall_floor": 0.65, "anchor_weight": 0.3, "top_k": 3,
+    cfg = {"threshold": None, "recall_floor": None, "anchor_weight": 0.3, "top_k": 3,
            "skip_projects": []}
     if os.path.exists(paths.CONFIG):
         with open(paths.CONFIG) as f:
