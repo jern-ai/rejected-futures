@@ -5,6 +5,7 @@ import json
 import math
 import os
 import sys
+import warnings
 
 import numpy as np
 
@@ -19,6 +20,9 @@ QUERY_PREFIX = "Represent this sentence for searching relevant passages: "
 os.environ.setdefault("HF_HUB_DISABLE_PROGRESS_BARS", "1")
 os.environ.setdefault("HF_HUB_VERBOSITY", "error")
 os.environ.setdefault("HF_HUB_DISABLE_TELEMETRY", "1")
+# fastembed asks for progress bars on download, and huggingface_hub answers the setting above
+# with a UserWarning; the one-line notice in embedder() says what is happening instead.
+warnings.filterwarnings("ignore", message="Cannot enable progress bars")
 
 _embedder = None
 
