@@ -2,10 +2,64 @@
 
 A memory of the decisions your coding agent keeps forgetting, built from the agent
 transcripts and git history already on your disk, and handed to whatever agent you use at
-the moment it is about to repeat one. Nothing leaves the laptop. No API key. No repository
-to connect.
+the moment it is about to repeat one. rf itself sends nothing anywhere. No API key. No
+repository to connect.
 
 Working name. Status: personal trial.
+
+## What it reads, keeps, and sends
+
+rf reads your agent transcripts, so this comes first.
+
+**Reads.** Every Claude Code transcript under `~/.claude/projects`, for every project, but
+only the text you typed and the text the assistant wrote back. Tool calls, tool results (the
+files, command output and web pages the agent read), subagent turns and injected system text
+are dropped as the file is parsed and never reach the classifier. To anchor claims to code it
+runs `git log`, `git show` and `git diff` in your local repositories; it never fetches or
+pushes.
+
+**Redacts.** Before anything is stored, every string passes through pattern redaction:
+assignments to names containing KEY, TOKEN, SECRET or PASSWORD; token formats with known
+prefixes (OpenAI and Anthropic `sk-`, GitHub, GitLab, Slack, AWS, Google, npm, PyPI, Fly,
+Jern); `Bearer` and `Authorization` values; and PEM private keys. It is pattern-based: a
+password written in plain prose, or a customer's data pasted into a chat, is not caught. Keep
+a project out entirely with `skip_projects` (see Configuration).
+
+**Keeps,** all in `~/.rejected-futures/`, as plain files you can read and delete:
+
+| File | What is in it |
+|---|---|
+| `candidates.jsonl` | Only the turns the classifier flags (about one in three): your turn cut to 2,000 characters, the assistant's reply before it to 600 and after it to 1,500, redacted, with the session id, timestamp, project path and branch. |
+| `claims/*.md` | The claims you or your agent recorded, each with a short evidence quote and its date. |
+| `state.json` | Which transcript files and turn ids have been read; no text. |
+| `index.json` | Embeddings of claim statements, for recall. |
+| `models/` | The embedding model (64 MB). |
+| `rf.log` | Scan counts; no text. |
+
+A turn that is not flagged leaves nothing behind but its id.
+
+**Sends.** rf makes one network request of its own: on first use it downloads the embedding
+model (`qdrant/bge-small-en-v1.5-onnx-q`) from Hugging Face. Your text is not part of that
+request, and after it rf runs offline (`HF_HUB_OFFLINE=1` enforces it). The classifier and
+recall run on your CPU.
+
+What rf hands your agent does travel, though, to whichever model provider your agent already
+uses, as part of your prompts:
+
+- `/rf-mine` gives your agent the flagged candidates to turn into claims, so those redacted
+  turns go to your agent's provider a second time; the provider saw them the first time,
+  when you wrote them.
+- The prompt and edit hooks and the MCP `recall` tool add up to three claims (`top_k`) to the agent's
+  context each time.
+
+Nothing goes to Jern or to anyone else.
+
+**Writes outside its folder** only when you ask: `rf setup claude-code --write` copies the
+`/rf-mine` command to `~/.claude/commands/` and adds two hooks to `~/.claude/settings.json`.
+
+**Removing it:** delete `~/.rejected-futures/` and `~/.claude/commands/rf-mine.md`, remove
+the two hook entries that run `rf hook` from `~/.claude/settings.json`, and run
+`claude mcp remove rejected-futures`.
 
 ## What it does
 
