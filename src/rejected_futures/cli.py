@@ -265,6 +265,8 @@ def main(argv=None):
     s = sub.add_parser("setup", help="install into a host agent")
     s.add_argument("host", choices=("claude-code",))
     s.add_argument("--write", action="store_true")
+    s = sub.add_parser("duplicates", help="held claim pairs that may be the same decision")
+    s.add_argument("--threshold", type=float, default=0.80)
     sub.add_parser("status", help="where things are and how many")
     a = ap.parse_args(argv)
 
@@ -293,8 +295,16 @@ def main(argv=None):
             print(f.read())
     elif a.cmd == "record":
         proj = A.toplevel(a.project or os.getcwd()) or a.project or os.getcwd()
+        scope = a.scope
+        p = proj if scope == "repository" else ""
+        dup = store.find_duplicate(a.statement, p, scope, a.quote)
+        if dup:
+            if a.quote:
+                store.add_evidence(dup, dict(source="cli", at=store.now_iso(), quote=a.quote))
+            print("already on record as", dup, "; evidence added")
+            return 0
         ev = [dict(source="cli", at=store.now_iso(), quote=a.quote)] if a.quote else []
-        c = store.new_claim(a.statement, kind=a.kind, scope=a.scope, project=proj if a.scope == "repository" else "", evidence=ev)
+        c = store.new_claim(a.statement, kind=a.kind, scope=scope, project=p, evidence=ev)
         print("recorded", c["id"])
     elif a.cmd == "retire":
         c = store.load_claim(a.id)
@@ -326,6 +336,13 @@ def main(argv=None):
         return hook(a.event)
     elif a.cmd == "setup":
         setup_claude(a.write)
+    elif a.cmd == "duplicates":
+        pairs = store.duplicate_pairs(threshold=a.threshold)
+        if not pairs:
+            print("no duplicate pairs at or above", a.threshold)
+        for score, x, y in pairs:
+            print(f"{score:.3f} [{x['id']}] {x['statement'][:80]}")
+            print(f"      [{y['id']}] {y['statement'][:80]}")
     elif a.cmd == "status":
         st = store.load_state()
         cs = store.load_candidates()
