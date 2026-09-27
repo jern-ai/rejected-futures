@@ -301,7 +301,7 @@ def main(argv=None):
         if dup:
             if a.quote:
                 store.add_evidence(dup, dict(source="cli", at=store.now_iso(), quote=a.quote))
-            print("already on record as", dup, "; evidence added")
+            print(f"already on record as {dup}; evidence added")
             return 0
         ev = [dict(source="cli", at=store.now_iso(), quote=a.quote)] if a.quote else []
         c = store.new_claim(a.statement, kind=a.kind, scope=scope, project=p, evidence=ev)

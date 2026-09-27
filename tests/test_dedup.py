@@ -123,6 +123,58 @@ def test_a_duplicate_in_another_project_or_retired_is_not_matched(home):
     assert store.find_duplicate("money stays as integer cents", p1, "repository", "") is None
 
 
+def test_a_short_quote_does_not_contain_a_longer_one(home):
+    proj = tempfile.mkdtemp()
+    VECS["Money is kept as integer cents."] = _unit(1.0, 0.0)
+    VECS["Use tabs, not spaces, in the Makefile."] = _unit(0.0, 1.0)
+
+    out = mcp_server.record(statement="Money is kept as integer cents.", kind="invariant",
+                            scope="repository", project=proj,
+                            quote="never store money as a float, always integer cents please")
+    assert out.startswith("recorded ")
+
+    out = mcp_server.record(statement="Use tabs, not spaces, in the Makefile.",
+                            project=proj, quote="money")
+    assert out.startswith("recorded ")
+    assert len(_claim_files(home)) == 2
+
+
+def test_a_repository_claim_matches_a_held_personal_claim(home):
+    proj = tempfile.mkdtemp()
+    VECS["keep money in integer cents"] = _unit(1.0, 0.0)
+    VECS["money stays as integer cents"] = _sim(0.90)
+    p = store.new_claim("keep money in integer cents", scope="personal")
+    assert store.find_duplicate("money stays as integer cents", proj, "repository", "") == p["id"]
+
+
+def test_a_personal_claim_matches_only_personal_claims(home):
+    proj = tempfile.mkdtemp()
+    VECS["keep money in integer cents"] = _unit(1.0, 0.0)
+    VECS["money stays as integer cents"] = _sim(0.90)
+    store.new_claim("keep money in integer cents", project=proj)
+    assert store.find_duplicate("money stays as integer cents", "", "personal", "") is None
+
+
+def test_duplicate_pairs_compares_personal_with_repository(home):
+    VECS["keep money in integer cents"] = _unit(1.0, 0.0)
+    VECS["money stays as integer cents"] = _sim(0.85)
+    p = store.new_claim("keep money in integer cents", scope="personal")
+    r = store.new_claim("money stays as integer cents", project="/tmp/proj")
+    pairs = store.duplicate_pairs()
+    ids = {(x["id"], y["id"]) for _, x, y in pairs}
+    assert (p["id"], r["id"]) in ids
+
+
+def test_find_duplicate_returns_the_most_similar(home):
+    proj = tempfile.mkdtemp()
+    VECS["money stays as integer cents"] = _unit(1.0, 0.0)
+    VECS["hold money as integer cents"] = _sim(0.90)   # first in listing order
+    VECS["keep money in integer cents"] = _sim(0.95)   # more similar
+    store.new_claim("hold money as integer cents", project=proj)
+    b = store.new_claim("keep money in integer cents", project=proj)
+    assert store.find_duplicate("money stays as integer cents", proj, "repository", "") == b["id"]
+
+
 def test_duplicates_lists_a_pair_and_changes_nothing(home, capsys):
     VECS["keep money in integer cents"] = _unit(1.0, 0.0)
     VECS["represent amounts in cents"] = _sim(0.85)
