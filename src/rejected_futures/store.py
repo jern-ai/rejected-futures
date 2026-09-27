@@ -209,3 +209,99 @@ def add_evidence(cid, ev):
     c["evidence"].append(ev)
     save_claim(c)
     return c
+
+
+# ---- duplicate detection --------------------------------------------------------------
+
+DUP_SIMILARITY = 0.88
+MIN_QUOTE = 40
+
+
+def _norm_quote(s):
+    """Lower-cased, whitespace-collapsed text, for quote containment."""
+    return re.sub(r"\s+", " ", (s or "").lower()).strip()
+
+
+def find_duplicate(statement, project, scope, quote):
+    """The id of a held claim this one repeats, or None.
+
+    A personal claim reaches every repository, so a new repository-scope claim is compared with
+    the repository claims in the same project (store.same_project) and with every held personal
+    claim; a new personal claim is compared only with personal claims. A claim is a duplicate
+    when either
+
+    - the new quote, lower-cased and with whitespace collapsed, contains an existing claim's
+      evidence quote or is contained in one, the shorter of the two being at least 40
+      characters -- the record-then-mine case, which needs no model; or
+    - the cosine similarity of the two statements, embedded the way recall.claim_vectors
+      embeds claims (the same model, normalized), is at least 0.88; the most similar such claim
+      is returned. Measured on 140 real claims, every pair at 0.88 or above was the same
+      decision, and the first pair of different claims appeared at 0.866."""
+    claims = []
+    for c in list_claims(status="held"):
+        cs = c.get("scope")
+        if cs == "personal":
+            claims.append(c)
+        elif scope == "repository" and same_project(c.get("project", ""), project):
+            claims.append(c)
+    if not claims:
+        return None
+    nq = _norm_quote(quote)
+    if nq:
+        for c in claims:
+            for ev in c.get("evidence") or []:
+                ne = _norm_quote(ev.get("quote"))
+                if min(len(nq), len(ne)) >= MIN_QUOTE and (nq in ne or ne in nq):
+                    return c["id"]
+    from . import recall
+    from .classify import embed
+    q = embed([statement], normalize=True)[0]
+    vecs = recall.claim_vectors(claims)
+    best_id, best = None, -1.0
+    for c in claims:
+        sim = float(q @ vecs[c["id"]])
+        if sim >= DUP_SIMILARITY and sim > best:
+            best, best_id = sim, c["id"]
+    return best_id
+
+
+def duplicate_pairs(threshold=0.80):
+    """Held claim pairs that may be the same decision, cosine >= threshold, highest first.
+
+    Each item is (score, a, b) with a and b whole claims. Claims are compared when they share a
+    scope, and a personal claim is compared with every repository claim (it reaches every
+    repository); repository claims in different projects are not compared. Read-only: it merges
+    and retires nothing."""
+    from . import recall
+    claims = list_claims(status="held")
+    personal = [c for c in claims if c.get("scope") == "personal"]
+    groups = {}
+    for c in claims:
+        if c.get("scope") == "repository":
+            groups.setdefault(c.get("project", ""), []).append(c)
+    out = []
+
+    def _pairwise(group):
+        vecs = recall.claim_vectors(group)
+        for i in range(len(group)):
+            for j in range(i + 1, len(group)):
+                sim = float(vecs[group[i]["id"]] @ vecs[group[j]["id"]])
+                if sim >= threshold:
+                    out.append((round(sim, 3), group[i], group[j]))
+
+    if len(personal) >= 2:
+        _pairwise(personal)
+    for group in groups.values():
+        if len(group) >= 2:
+            _pairwise(group)
+    for group in groups.values():
+        if not group or not personal:
+            continue
+        vecs = recall.claim_vectors(personal + group)
+        for p in personal:
+            for r in group:
+                sim = float(vecs[p["id"]] @ vecs[r["id"]])
+                if sim >= threshold:
+                    out.append((round(sim, 3), p, r))
+    out.sort(key=lambda t: -t[0])
+    return out

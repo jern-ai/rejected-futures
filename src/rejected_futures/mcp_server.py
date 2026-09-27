@@ -37,9 +37,14 @@ def record(statement: str, kind: str = "decision", scope: str = "repository", pr
     """Record a claim now, in the developer's terms. kind: decision | invariant | preference |
     rejected | fact. scope: repository (this repo only) or personal (every repo). quote: the
     developer's words that formed it. anchors: optional path::symbol keys it governs."""
+    proj = _project(project) if scope == "repository" else ""
+    dup = store.find_duplicate(statement, proj, scope, quote)
+    if dup:
+        if quote:
+            store.add_evidence(dup, dict(source="agent", at=store.now_iso(), quote=quote))
+        return f"already on record as {dup}; evidence added"
     ev = [dict(source="agent", at=store.now_iso(), quote=quote)] if quote else []
-    c = store.new_claim(statement, kind=kind, scope=scope, project=_project(project) if scope == "repository" else "",
-                        evidence=ev, anchors=anchors or [])
+    c = store.new_claim(statement, kind=kind, scope=scope, project=proj, evidence=ev, anchors=anchors or [])
     return f"recorded {c['id']}"
 
 
@@ -74,9 +79,25 @@ def resolve(candidate_id: str, action: str, statement: str = "", kind: str = "de
         return f"skipped {candidate_id}"
     if action != "claim" or not statement.strip():
         return "action must be claim (with a statement) or skip"
+    proj = c.get("project", "") if scope == "repository" else ""
+    q = (quote or c.get("user", ""))[:600]
+    dup = store.find_duplicate(statement, proj, scope, q)
+    if dup:
+        store.add_evidence(dup, dict(source=c.get("source", "claude-code"), session=c.get("session", ""),
+                                     at=c.get("ts", ""), quote=q))
+        store.resolve_candidate(candidate_id, "claimed", dup)
+        existing = store.load_claim(dup)
+        if existing.get("anchors"):
+            return f"already on record as {dup}; evidence added"
+        try:
+            from .cli import anchor_claim
+            n = anchor_claim(dup)
+            return f"already on record as {dup}; evidence added ({n} anchors)"
+        except Exception as e:  # anchoring is best effort
+            return f"already on record as {dup}; evidence added (no anchors: {e})"
     ev = [dict(source=c.get("source", "claude-code"), session=c.get("session", ""), at=c.get("ts", ""),
-               quote=(quote or c.get("user", ""))[:600])]
-    claim = store.new_claim(statement, kind=kind, scope=scope, project=c.get("project", "") if scope == "repository" else "",
+               quote=q)]
+    claim = store.new_claim(statement, kind=kind, scope=scope, project=proj,
                             since=c.get("ts"), evidence=ev)
     store.resolve_candidate(candidate_id, "claimed", claim["id"])
     try:
