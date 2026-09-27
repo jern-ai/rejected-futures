@@ -139,6 +139,15 @@ of the store, `0.61 + 0.015 × ln(claims)`: about 0.61 for one claim and 0.68 fo
 because the best score among unrelated claims rises with their number by chance alone. Set it
 to fix the floor instead.
 
+## Superseded and restated claims
+
+When a newer claim covers the same topic in the same scope as an older one, the newer claim
+supersedes it: the new claim is recorded as if the old one were not there, and the old claim
+is marked `superseded` with `superseded_by` pointing at the new one. A superseded claim is
+kept on disk but never recalled. A claim that repeats the same words as an existing one is
+not a supersede but a restatement: its evidence is appended to the existing claim, because
+the record-then-mine case finds the same words twice.
+
 ## A claim, as stored
 
     ---

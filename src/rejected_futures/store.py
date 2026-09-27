@@ -13,7 +13,7 @@ from . import paths
 
 KINDS = ("decision", "invariant", "preference", "rejected", "fact")
 SCOPES = ("repository", "personal")
-STATUSES = ("held", "retired", "contradicted", "suggested")
+STATUSES = ("held", "retired", "contradicted", "suggested", "superseded")
 
 
 def now_iso():
@@ -223,12 +223,13 @@ def _norm_quote(s):
 
 
 def find_duplicate(statement, project, scope, quote):
-    """The id of a held claim this one repeats, or None.
+    """How a held claim this one repeats matched, or None.
 
-    A personal claim reaches every repository, so a new repository-scope claim is compared with
-    the repository claims in the same project (store.same_project) and with every held personal
-    claim; a new personal claim is compared only with personal claims. A claim is a duplicate
-    when either
+    Returns (id, "quote") when the same words matched, or (id, "similar") when the statements
+    are close enough to be the same topic. A personal claim reaches every repository, so a new
+    repository-scope claim is compared with the repository claims in the same project
+    (store.same_project) and with every held personal claim; a new personal claim is compared
+    only with personal claims. A claim matches when either
 
     - the new quote, lower-cased and with whitespace collapsed, contains an existing claim's
       evidence quote or is contained in one, the shorter of the two being at least 40
@@ -252,7 +253,7 @@ def find_duplicate(statement, project, scope, quote):
             for ev in c.get("evidence") or []:
                 ne = _norm_quote(ev.get("quote"))
                 if min(len(nq), len(ne)) >= MIN_QUOTE and (nq in ne or ne in nq):
-                    return c["id"]
+                    return (c["id"], "quote")
     from . import recall
     from .classify import embed
     q = embed([statement], normalize=True)[0]
@@ -262,7 +263,42 @@ def find_duplicate(statement, project, scope, quote):
         sim = float(q @ vecs[c["id"]])
         if sim >= DUP_SIMILARITY and sim > best:
             best, best_id = sim, c["id"]
-    return best_id
+    if best_id is None:
+        return None
+    return (best_id, "similar")
+
+
+def same_scope(a, b):
+    """Whether two claims live in the same scope: same project for repository scope, or both
+    personal."""
+    if a.get("scope") != b.get("scope"):
+        return False
+    if a.get("scope") == "personal":
+        return True
+    return same_project(a.get("project", ""), b.get("project", ""))
+
+
+def supersede(old_id, statement, kind="decision", project="", since=None, evidence=None,
+              anchors=None):
+    """Record a new claim that replaces an older one.
+
+    The new claim is created as if there were no match. Its evidence is the new evidence
+    followed by the old claim's evidence, each carried entry marked superseded. If it has no
+    anchors of its own the old claim's anchors are copied. Then the old claim is marked
+    superseded with superseded_by set to the new id."""
+    old = load_claim(old_id)
+    carried = []
+    for ev in old.get("evidence") or []:
+        e = dict(ev)
+        e["superseded"] = True
+        carried.append(e)
+    new_anchors = list(anchors or []) or list(old.get("anchors") or [])
+    c = new_claim(statement, kind=kind, scope=old.get("scope", "repository"), project=project,
+                  since=since, evidence=list(evidence or []) + carried, anchors=new_anchors)
+    old["status"] = "superseded"
+    old["superseded_by"] = c["id"]
+    save_claim(old)
+    return c
 
 
 def duplicate_pairs(threshold=0.80):
