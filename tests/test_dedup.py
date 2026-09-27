@@ -86,16 +86,51 @@ def test_record_then_resolve_extends_the_same_claim(home):
     assert cand["status"] == "claimed" and cand["claim"] == cid
 
 
-def test_a_similar_statement_reuses_the_claim(home):
+def test_a_similar_statement_supersedes_the_claim(home):
     proj = tempfile.mkdtemp()
     VECS["keep money in integer cents"] = _unit(1.0, 0.0)
-    VECS["money stays as integer cents"] = _sim(0.90)
+    VECS["money stays as integer cents"] = _sim(0.93)
 
-    out = mcp_server.record(statement="keep money in integer cents", project=proj)
-    cid = out.split()[1]
+    out = mcp_server.record(statement="keep money in integer cents", project=proj,
+                            quote="keep money in integer cents, please",
+                            anchors=["src/money.py::cents"])
+    old = out.split()[1]
     out = mcp_server.record(statement="money stays as integer cents", project=proj)
-    assert out == f"already on record as {cid}; evidence added"
-    assert _claim_files(home) == [cid + ".md"]
+    assert out.startswith("recorded ") and out.endswith(f"; supersedes {old}")
+    new = out.split(";")[0].split()[1]
+
+    assert _claim_files(home) == sorted([old + ".md", new + ".md"])
+    newest = store.load_claim(new)
+    assert newest["status"] == "held"
+    assert store.load_claim(old)["status"] == "superseded"
+    assert store.load_claim(old)["superseded_by"] == new
+    assert [c["id"] for c in store.list_claims(status="held")] == [new]
+    # the new claim carries the old evidence, marked superseded, and the old anchors
+    carried = [e for e in newest["evidence"] if e.get("superseded")]
+    assert carried and carried[-1]["quote"] == "keep money in integer cents, please"
+    assert newest["anchors"] == ["src/money.py::cents"]
+
+
+def test_resolve_with_a_similar_match_supersedes(home):
+    proj = tempfile.mkdtemp()
+    VECS["keep money in integer cents"] = _unit(1.0, 0.0)
+    VECS["money stays as integer cents"] = _sim(0.93)
+    out = mcp_server.record(statement="keep money in integer cents", project=proj)
+    old = out.split()[1]
+
+    store.append_candidates([dict(id="c1", project=proj, source="claude-code", session="s1",
+                                  ts="2026-09-01T10:00:00Z", p=0.9, status="open",
+                                  user="no. money stays as integer cents")])
+    out = mcp_server.resolve(candidate_id="c1", action="claim",
+                             statement="money stays as integer cents", kind="invariant",
+                             scope="repository")
+    assert out.startswith("recorded ") and f"supersedes {old}" in out
+    new = out.split(";")[0].split()[1]
+
+    cand = [x for x in store.load_candidates() if x["id"] == "c1"][0]
+    assert cand["status"] == "claimed" and cand["claim"] == new
+    assert store.load_claim(old)["status"] == "superseded"
+    assert store.load_claim(old)["superseded_by"] == new
 
 
 def test_a_statement_below_the_threshold_makes_a_new_claim(home):
@@ -116,7 +151,7 @@ def test_a_duplicate_in_another_project_or_retired_is_not_matched(home):
 
     c = store.new_claim("keep money in integer cents", project=p1)
     assert store.find_duplicate("money stays as integer cents", p2, "repository", "") is None
-    assert store.find_duplicate("money stays as integer cents", p1, "repository", "") == c["id"]
+    assert store.find_duplicate("money stays as integer cents", p1, "repository", "") == (c["id"], "similar")
 
     c["status"] = "retired"
     store.save_claim(c)
@@ -144,7 +179,22 @@ def test_a_repository_claim_matches_a_held_personal_claim(home):
     VECS["keep money in integer cents"] = _unit(1.0, 0.0)
     VECS["money stays as integer cents"] = _sim(0.90)
     p = store.new_claim("keep money in integer cents", scope="personal")
-    assert store.find_duplicate("money stays as integer cents", proj, "repository", "") == p["id"]
+    assert store.find_duplicate("money stays as integer cents", proj, "repository", "") == (p["id"], "similar")
+
+
+def test_a_repository_claim_similar_to_a_personal_one_is_recorded_alone(home):
+    proj = tempfile.mkdtemp()
+    VECS["keep money in integer cents"] = _unit(1.0, 0.0)
+    VECS["money stays as integer cents"] = _sim(0.93)
+    p = store.new_claim("keep money in integer cents", scope="personal")
+
+    out = mcp_server.record(statement="money stays as integer cents", project=proj)
+    assert out.startswith("recorded ") and "supersedes" not in out
+
+    held = store.list_claims(status="held")
+    assert len(held) == 2
+    assert store.load_claim(p["id"])["status"] == "held"
+    assert "superseded_by" not in store.load_claim(p["id"])
 
 
 def test_a_personal_claim_matches_only_personal_claims(home):
@@ -172,7 +222,7 @@ def test_find_duplicate_returns_the_most_similar(home):
     VECS["keep money in integer cents"] = _sim(0.95)   # more similar
     store.new_claim("hold money as integer cents", project=proj)
     b = store.new_claim("keep money in integer cents", project=proj)
-    assert store.find_duplicate("money stays as integer cents", proj, "repository", "") == b["id"]
+    assert store.find_duplicate("money stays as integer cents", proj, "repository", "") == (b["id"], "similar")
 
 
 def test_duplicates_lists_a_pair_and_changes_nothing(home, capsys):

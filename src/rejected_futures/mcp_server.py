@@ -40,9 +40,17 @@ def record(statement: str, kind: str = "decision", scope: str = "repository", pr
     proj = _project(project) if scope == "repository" else ""
     dup = store.find_duplicate(statement, proj, scope, quote)
     if dup:
-        if quote:
-            store.add_evidence(dup, dict(source="agent", at=store.now_iso(), quote=quote))
-        return f"already on record as {dup}; evidence added"
+        did, how = dup
+        if how == "quote":
+            if quote:
+                store.add_evidence(did, dict(source="agent", at=store.now_iso(), quote=quote))
+            return f"already on record as {did}; evidence added"
+        old = store.load_claim(did)
+        if store.same_scope(old, dict(scope=scope, project=proj)):
+            ev = [dict(source="agent", at=store.now_iso(), quote=quote)] if quote else []
+            c = store.supersede(did, statement, kind=kind, project=proj, evidence=ev,
+                                anchors=anchors or [])
+            return f"recorded {c['id']}; supersedes {did}"
     ev = [dict(source="agent", at=store.now_iso(), quote=quote)] if quote else []
     c = store.new_claim(statement, kind=kind, scope=scope, project=proj, evidence=ev, anchors=anchors or [])
     return f"recorded {c['id']}"
@@ -83,18 +91,33 @@ def resolve(candidate_id: str, action: str, statement: str = "", kind: str = "de
     q = (quote or c.get("user", ""))[:600]
     dup = store.find_duplicate(statement, proj, scope, q)
     if dup:
-        store.add_evidence(dup, dict(source=c.get("source", "claude-code"), session=c.get("session", ""),
-                                     at=c.get("ts", ""), quote=q))
-        store.resolve_candidate(candidate_id, "claimed", dup)
-        existing = store.load_claim(dup)
-        if existing.get("anchors"):
-            return f"already on record as {dup}; evidence added"
-        try:
-            from .cli import anchor_claim
-            n = anchor_claim(dup)
-            return f"already on record as {dup}; evidence added ({n} anchors)"
-        except Exception as e:  # anchoring is best effort
-            return f"already on record as {dup}; evidence added (no anchors: {e})"
+        did, how = dup
+        if how == "quote":
+            store.add_evidence(did, dict(source=c.get("source", "claude-code"), session=c.get("session", ""),
+                                         at=c.get("ts", ""), quote=q))
+            store.resolve_candidate(candidate_id, "claimed", did)
+            existing = store.load_claim(did)
+            if existing.get("anchors"):
+                return f"already on record as {did}; evidence added"
+            try:
+                from .cli import anchor_claim
+                n = anchor_claim(did)
+                return f"already on record as {did}; evidence added ({n} anchors)"
+            except Exception as e:  # anchoring is best effort
+                return f"already on record as {did}; evidence added (no anchors: {e})"
+        old = store.load_claim(did)
+        if store.same_scope(old, dict(scope=scope, project=proj)):
+            ev = [dict(source=c.get("source", "claude-code"), session=c.get("session", ""),
+                       at=c.get("ts", ""), quote=q)]
+            claim = store.supersede(did, statement, kind=kind, project=proj, since=c.get("ts"),
+                                    evidence=ev)
+            store.resolve_candidate(candidate_id, "claimed", claim["id"])
+            try:
+                from .cli import anchor_claim
+                n = anchor_claim(claim["id"])
+                return f"recorded {claim['id']}; supersedes {did} ({n} anchors)"
+            except Exception as e:  # anchoring is best effort
+                return f"recorded {claim['id']}; supersedes {did} (no anchors: {e})"
     ev = [dict(source=c.get("source", "claude-code"), session=c.get("session", ""), at=c.get("ts", ""),
                quote=q)]
     claim = store.new_claim(statement, kind=kind, scope=scope, project=proj,
@@ -114,8 +137,13 @@ def claims(project: str = "", status: str = "held") -> str:
     cs = store.list_claims(project=_project(project), status=status)
     if not cs:
         return "No claims."
-    return "\n".join(f"[{c['id']}] ({c.get('kind')}, {c.get('scope')}, {c.get('status')}, since {c.get('since')}) {c['statement']}"
-                     for c in cs)
+    def line(c):
+        s = (f"[{c['id']}] ({c.get('kind')}, {c.get('scope')}, {c.get('status')}, "
+             f"since {c.get('since')}) {c['statement']}")
+        if c.get("status") == "superseded" and c.get("superseded_by"):
+            s += f" superseded by {c['superseded_by']}"
+        return s
+    return "\n".join(line(c) for c in cs)
 
 
 @mcp.tool()

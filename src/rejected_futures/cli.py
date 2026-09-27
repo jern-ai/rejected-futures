@@ -287,8 +287,11 @@ def main(argv=None):
         proj = None if a.all else (A.toplevel(a.project or os.getcwd()) or a.project or os.getcwd())
         cs = store.list_claims(project=proj, status=a.status)
         for c in cs:
-            print(f"[{c['id']}] ({c.get('kind')}, {c.get('scope')}, {c.get('status')}, since {c.get('since')}, "
-                  f"{len(c.get('anchors') or [])} anchors) {c['statement']}")
+            line = (f"[{c['id']}] ({c.get('kind')}, {c.get('scope')}, {c.get('status')}, since {c.get('since')}, "
+                    f"{len(c.get('anchors') or [])} anchors) {c['statement']}")
+            if c.get("status") == "superseded" and c.get("superseded_by"):
+                line += f" superseded by {c['superseded_by']}"
+            print(line)
         print(f"{len(cs)} claims")
     elif a.cmd == "show":
         with open(store.claim_path(a.id)) as f:
@@ -299,10 +302,18 @@ def main(argv=None):
         p = proj if scope == "repository" else ""
         dup = store.find_duplicate(a.statement, p, scope, a.quote)
         if dup:
-            if a.quote:
-                store.add_evidence(dup, dict(source="cli", at=store.now_iso(), quote=a.quote))
-            print(f"already on record as {dup}; evidence added")
-            return 0
+            did, how = dup
+            if how == "quote":
+                if a.quote:
+                    store.add_evidence(did, dict(source="cli", at=store.now_iso(), quote=a.quote))
+                print(f"already on record as {did}; evidence added")
+                return 0
+            old = store.load_claim(did)
+            if store.same_scope(old, dict(scope=scope, project=p)):
+                ev = [dict(source="cli", at=store.now_iso(), quote=a.quote)] if a.quote else []
+                c = store.supersede(did, a.statement, kind=a.kind, project=p, evidence=ev)
+                print(f"recorded {c['id']}; supersedes {did}")
+                return 0
         ev = [dict(source="cli", at=store.now_iso(), quote=a.quote)] if a.quote else []
         c = store.new_claim(a.statement, kind=a.kind, scope=scope, project=p, evidence=ev)
         print("recorded", c["id"])
