@@ -74,6 +74,16 @@ def candidates(limit: int = 10, project: str = "") -> str:
 
 
 @mcp.tool()
+def graduation_candidates(project: str = "", limit: int = 10) -> str:
+    """Read-only: held claims worth moving into the repository as a test or a doc line, ranked,
+    with a proposed target each. Only the current repository by default; pass project="*" for
+    every project. Writes nothing."""
+    from . import graduate as G
+    proj = None if project == "*" else _project(project)
+    return G.render(G.suggest(project=proj, limit=limit))
+
+
+@mcp.tool()
 def resolve(candidate_id: str, action: str, statement: str = "", kind: str = "decision",
             scope: str = "repository", quote: str = "") -> str:
     """Resolve a candidate: action "claim" records a claim from it (statement, kind, scope;

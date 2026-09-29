@@ -122,7 +122,8 @@ To work on rf itself, use a virtual environment and an editable install:
 | `rf anchor [id]` | Derive code anchors from origin commits (every unanchored claim when no id). |
 | `rf retire id` | Mark a claim retired or `--status contradicted`. |
 | `rf duplicates` | Held claim pairs that may be the same decision (cosine ≥ 0.80), so a person can retire one; it merges nothing. |
-| `rf serve` | The MCP server over stdio: `recall`, `record`, `candidates`, `resolve`, `claims`, `retire`. |
+| `rf graduate --suggest` | Held claims worth moving into the repository as a test or a doc line, ranked, each with a proposed target; `--project`, `--all`, `--limit` (default 10). Read-only. |
+| `rf serve` | The MCP server over stdio: `recall`, `record`, `candidates`, `resolve`, `claims`, `retire`, `graduation_candidates`. |
 | `rf --version` | Print the installed version. |
 | `rf hook prompt|edit` | Claude Code hook entry points (installed by `rf setup claude-code --write`). |
 

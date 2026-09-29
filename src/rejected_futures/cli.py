@@ -267,6 +267,11 @@ def main(argv=None):
     s.add_argument("--write", action="store_true")
     s = sub.add_parser("duplicates", help="held claim pairs that may be the same decision")
     s.add_argument("--threshold", type=float, default=0.80)
+    s = sub.add_parser("graduate", help="claims worth moving into the repository, with a target")
+    s.add_argument("--suggest", action="store_true", help="list graduation suggestions (read-only)")
+    s.add_argument("--project", default="")
+    s.add_argument("--all", action="store_true", help="every project")
+    s.add_argument("--limit", type=int, default=10)
     sub.add_parser("status", help="where things are and how many")
     a = ap.parse_args(argv)
 
@@ -354,6 +359,13 @@ def main(argv=None):
         for score, x, y in pairs:
             print(f"{score:.3f} [{x['id']}] {x['statement'][:80]}")
             print(f"      [{y['id']}] {y['statement'][:80]}")
+    elif a.cmd == "graduate":
+        if not a.suggest:
+            print("only --suggest is implemented")
+            return 1
+        from . import graduate as G
+        proj = None if a.all else (A.toplevel(a.project or os.getcwd()) or a.project or os.getcwd())
+        print(G.render(G.suggest(project=proj, limit=a.limit)))
     elif a.cmd == "status":
         st = store.load_state()
         cs = store.load_candidates()
