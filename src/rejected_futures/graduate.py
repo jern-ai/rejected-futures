@@ -63,7 +63,7 @@ def _sort_key(claim):
 def suggest(project=None, limit=10):
     """Ranked held claims for a project (repository claims plus personal ones), each with its
     proposed target. project None means every project. Returns a list of dicts; writes
-    nothing."""
+    nothing. evidence is the live count; superseded is how many entries are marked superseded."""
     claims = store.list_claims(project=project, status="held")
     claims.sort(key=_sort_key)
     if limit is not None:
@@ -71,8 +71,10 @@ def suggest(project=None, limit=10):
     out = []
     for c in claims:
         target, covers = target_for(c)
+        entries = c.get("evidence") or []
+        live = len(_live_evidence(c))
         out.append(dict(id=c["id"], kind=c.get("kind"), scope=c.get("scope"),
-                        since=c.get("since"), evidence=len(c.get("evidence") or []),
+                        since=c.get("since"), evidence=live, superseded=len(entries) - live,
                         anchors=len(c.get("anchors") or []), target=target, covers=covers,
                         statement=c["statement"]))
     return out
@@ -87,8 +89,12 @@ def render(suggestions):
         target = s["target"]
         if target == "test" and s["covers"]:
             target = "test (covers: " + ", ".join(s["covers"]) + ")"
+        evidence = f"{s['evidence']} evidence"
+        if s.get("superseded"):
+            evidence += f" (+{s['superseded']} superseded)"
         lines.append(f"[{s['id']}] ({s['kind']}, {s['scope']}, {s['since']}, "
-                     f"{s['evidence']} evidence, {s['anchors']} anchors) -> {target}")
+                     f"{evidence}, {s['anchors']} anchors) -> {target}")
         lines.append(s["statement"].replace("\n", " ")[:160])
-    lines.append(f"{len(suggestions)} claims suggested")
+    n = len(suggestions)
+    lines.append(f"{n} claim suggested" if n == 1 else f"{n} claims suggested")
     return "\n".join(lines)
