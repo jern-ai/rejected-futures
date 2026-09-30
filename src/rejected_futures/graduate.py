@@ -13,6 +13,8 @@ NO_DOC = "doc (no CLAUDE.md or AGENTS.md in this repository)"
 
 PERSONAL_DOC = "doc: ~/.claude/CLAUDE.md"
 
+PERSONAL_NO_DOC = "doc (no ~/.claude/CLAUDE.md)"
+
 
 def _repo_doc(project):
     """The repository doc target: CLAUDE.md or AGENTS.md at the root if one exists, else the
@@ -24,12 +26,21 @@ def _repo_doc(project):
     return NO_DOC
 
 
+def _personal_doc():
+    """The personal doc target: the user-level ~/.claude/CLAUDE.md if it exists, else the note
+    that it does not. The path is resolved at call time, so a test can point HOME at a
+    temporary directory. Never proposes creating a new file."""
+    if os.path.exists(os.path.expanduser("~/.claude/CLAUDE.md")):
+        return PERSONAL_DOC
+    return PERSONAL_NO_DOC
+
+
 def target_for(claim):
     """(target, covers) for one claim. target is "test" or a "doc..." string; covers is the
     anchors a test should cover (empty for a doc target)."""
     anchors = list(claim.get("anchors") or [])
     if claim.get("scope") == "personal":
-        return PERSONAL_DOC, []
+        return _personal_doc(), []
     kind = claim.get("kind")
     if kind == "invariant":
         return "test", anchors[:3]
@@ -49,9 +60,11 @@ def _restated(claim):
 
 
 def _sort_key(claim):
-    """Restated first; then kind (invariant, rejected, decision, fact, preference); then
-    anchored before unanchored; then older since first; then id for stability."""
+    """Repository scope before personal scope; then restated first; then kind (invariant,
+    rejected, decision, fact, preference); then anchored before unanchored; then older since
+    first; then id for stability."""
     return (
+        0 if claim.get("scope") != "personal" else 1,
         0 if _restated(claim) else 1,
         KIND_ORDER.get(claim.get("kind"), len(KIND_ORDER)),
         0 if claim.get("anchors") else 1,

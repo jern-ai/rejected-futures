@@ -19,6 +19,9 @@ def home(tmp_path, monkeypatch):
     monkeypatch.setattr(paths, "STATE", str(tmp_path / "state.json"))
     monkeypatch.setattr(paths, "INDEX", str(tmp_path / "index.json"))
     monkeypatch.setattr(paths, "CONFIG", str(tmp_path / "config.json"))
+    # The personal doc target is ~/.claude/CLAUDE.md, resolved at call time; point HOME at a
+    # temporary directory so no test ever reads the real home.
+    monkeypatch.setenv("HOME", str(tmp_path))
     paths.ensure()
     return tmp_path
 
@@ -67,7 +70,25 @@ def test_every_kind_and_scope_maps_to_a_target(home):
 
     for kind in store.KINDS:
         p = _a_claim("personal thing", kind=kind, scope="personal")
-        assert graduate.target_for(p) == ("doc: ~/.claude/CLAUDE.md", [])
+        assert graduate.target_for(p) == ("doc (no ~/.claude/CLAUDE.md)", [])
+
+
+def test_personal_doc_target_names_the_user_doc_when_it_exists(home, monkeypatch):
+    # HOME is a tmp_path subdirectory, so nothing here reads the real home directory.
+    user_home = home / "user-home"
+    (user_home / ".claude").mkdir(parents=True)
+    (user_home / ".claude" / "CLAUDE.md").write_text("# notes\n")
+    monkeypatch.setenv("HOME", str(user_home))
+    p = _a_claim("say so when unsure", kind="preference", scope="personal")
+    assert graduate.target_for(p) == ("doc: ~/.claude/CLAUDE.md", [])
+
+
+def test_personal_doc_target_says_so_when_the_user_doc_is_absent(home, monkeypatch):
+    user_home = home / "empty-home"
+    user_home.mkdir()
+    monkeypatch.setenv("HOME", str(user_home))
+    p = _a_claim("say so when unsure", kind="preference", scope="personal")
+    assert graduate.target_for(p) == ("doc (no ~/.claude/CLAUDE.md)", [])
 
 
 def test_a_test_target_lists_up_to_three_anchors(home):
@@ -94,6 +115,28 @@ def test_repository_doc_prefers_claude_then_agents_then_neither(home):
 
 
 # ---- ranking -----------------------------------------------------------------------------
+
+def test_repository_scope_beats_restated_personal(home):
+    proj = _project(home)
+    # several restated personal claims would outrank a plain repository claim on the other
+    # keys; scope comes first, so the repository claim leads.
+    for i in range(3):
+        _a_claim(f"personal rule {i}", kind="invariant", scope="personal",
+                 since=f"2026-09-0{i + 1}", evidence=_ev(2))
+    repo = _a_claim("keep cents", kind="invariant", project=proj, since="2026-09-20")
+    ids = [s["id"] for s in graduate.suggest(project=proj)]
+    assert ids[0] == repo["id"]
+
+
+def test_limit_one_returns_the_repository_claim(home):
+    proj = _project(home)
+    for i in range(3):
+        _a_claim(f"personal rule {i}", kind="invariant", scope="personal",
+                 since=f"2026-09-0{i + 1}", evidence=_ev(2))
+    repo = _a_claim("keep cents", kind="invariant", project=proj, since="2026-09-20")
+    got = graduate.suggest(project=proj, limit=1)
+    assert [s["id"] for s in got] == [repo["id"]]
+
 
 def test_restated_beats_kind(home):
     proj = _project(home)
