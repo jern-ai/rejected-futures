@@ -103,15 +103,22 @@ A slash command `commands/rf-graduate.md`, installed by `rf setup claude-code --
 
 Deterministic, no model at all. Sorted by, in order:
 
-1. Restated: more than one evidence entry not marked `superseded` means the agent broke the rule
+1. Scope: every repository-scope claim before every personal-scope claim, so the repository's
+   own claims cannot be pushed off the list by personal ones.
+2. Restated: more than one evidence entry not marked `superseded` means the agent broke the rule
    again after it was recorded. That is the strongest sign recall alone is not enough.
-2. Kind: `invariant`, then `rejected`, `decision`, `fact`, `preference`.
-3. Anchored before unanchored: claims with code anchors have a clear place for a test to point at.
-4. Older `since` first, then id.
+3. Kind: `invariant`, then `rejected`, `decision`, `fact`, `preference`.
+4. Anchored before unanchored: claims with code anchors have a clear place for a test to point at.
+5. Older `since` first, then id.
+
+One list and one `--limit`; the limit applies after the whole ranking, so the top of the list is
+the top repository claims, then the top personal ones.
 
 Proposed targets: repository `invariant` goes to `test`; repository `rejected` goes to `test`
 when anchored, otherwise to doc; other repository kinds go to doc, naming an existing CLAUDE.md
-or AGENTS.md, or saying neither exists. Personal claims go to `~/.claude/CLAUDE.md`.
+or AGENTS.md, or saying neither exists. Personal claims go to `~/.claude/CLAUDE.md` when that
+file exists, and otherwise to `doc (no ~/.claude/CLAUDE.md)`; rf never proposes a file that does
+not exist.
 
 Recall hit counts would help too ("recalled 40 times"), but rf does not track them today.
 Adding them means storing claim ids per recall, and ids are slugs of the claim text, so it
